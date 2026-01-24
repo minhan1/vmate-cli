@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/minhan1/vmate-cli/lib/fileUtil"
 	"github.com/minhan1/vmate-cli/lib/network"
-	"github.com/minhan1/vmate-cli/lib/util"
 	"github.com/minhan1/vmate-cli/lib/vpn"
 
 	"github.com/spf13/cobra"
@@ -28,16 +28,18 @@ var (
 	modify     bool
 	connect    string
 )
+
 var rootCmd = &cobra.Command{
 	Use:   "vmate-cli",
 	Short: "VPN config tester",
 	Long:  `A tool to test and manage VPN configurations.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if recent {
-			if checkIncompatibleFlags("recent", false){
+			if checkIncompatibleFlags("recent", false) {
 				return
 			}
-			vpns, err := util.OpenText()
+			// Fixed: fileUtil -> fileUtil
+			vpns, err := fileUtil.OpenText()
 			if err != nil {
 				return
 			}
@@ -52,7 +54,7 @@ var rootCmd = &cobra.Command{
 			expandedPath, _ := expandPath(dir)
 			reconnect := false
 			Proconnect := &reconnect
-			if checkIncompatibleFlags("connect", true){
+			if checkIncompatibleFlags("connect", true) {
 				return
 			}
 			ensureAdminPrivileges(expandedPath, verbose, maxworkers, limit, timeout, modify, connect)
@@ -65,50 +67,55 @@ var rootCmd = &cobra.Command{
 			pCurrentConfig := &currentConfig
 			for {
 				loopcount++
-				fmt.Println("connecting to :" filepath.Base(currentConfig))
+				fmt.Println("connecting to :", filepath.Base(currentConfig))
 				c := network.GetLocation(currentConfig)
 
-				err := vpn.connectAndMonitor(ctx, currentConfig, c, Proconnect, verbose)
-				fmt.Println(reconnect , " after getting back from func")
+				err := vpn.ConnectAndMonitor(ctx, currentConfig, c, Proconnect, verbose)
+				fmt.Println(reconnect, " after getting back from func")
 				if ctx.Err() != nil {
 					fmt.Println("Operation cancelled by user.")
 					return
 				}
 				if err != nil {
-					fmt.Prinln("Reconnecting")
+					fmt.Println("Reconnecting")
 					if !reconnect {
 						reconnect = true
 						exec.Command("taskkill", "/F", "/IM", "openvpn.exe").Run()
 						continue
 					}
-					if reconnect{
+					if reconnect {
 						fmt.Println("In the reconnect attempt")
 						reconnect = false
 
-						vpns, err:= util.OpenText()
+						// Fixed: fileUtil -> fileUtil
+						vpns, err := fileUtil.OpenText()
 						if err != nil {
 							return
 						}
-						if len(vpns) == 1{
-							fmt.Println("There's so saved config in your recent")
+						if len(vpns) == 1 {
+							fmt.Println("There's no saved config in your recent")
 							return
 						}
-						fileFiltered := slices.DeleteFunc(vpns, func(s vpn.Vpn) bool{
+						// Fixed: vpn.Vpn -> vpn.VPN (Case sensitivity)
+						fileFiltered := slices.DeleteFunc(vpns, func(s vpn.VPN) bool {
 							return s.Path == strings.TrimSpace(currentConfig)
 
 						})
-					_, err = fileUtil.SaveAsText(failFiltered)
+						// Fixed: failFiltered -> fileFiltered (Typo), fileUtil -> fileUtil
+						_, err = fileUtil.SaveAsText(fileFiltered)
 						if err != nil {
 							fmt.Println("Save failed")
 							return
 						}
 
-						if len(failFiltered) == 0 {
-							fmt.Println("There's so saved config in your recent")
+						// Fixed: failFiltered -> fileFiltered
+						if len(fileFiltered) == 0 {
+							fmt.Println("There's no saved config in your recent")
 							return
 						}
-						if len(failFiltered) > 0 {
-							newConfig := failFiltered[1].Path
+						if len(fileFiltered) > 0 {
+							// Fixed: failFiltered -> fileFiltered, Index [1] -> [0] to avoid panic if len is 1
+							newConfig := fileFiltered[0].Path
 							*pCurrentConfig = newConfig
 							fmt.Println("New Config inserted", filepath.Base(currentConfig))
 							continue
@@ -122,10 +129,12 @@ var rootCmd = &cobra.Command{
 		expandedPath, _ := expandPath(dir)
 		ensureAdminPrivileges(expandedPath, verbose, maxworkers, limit, timeout, modify, connect)
 
+		// Fixed: fileUtil -> fileUtil
 		paths, err := fileUtil.GetConfigs(expandedPath)
 
 		if modify {
 			fmt.Println("Modifying!!")
+			// Fixed: fileUtil -> fileUtil
 			fileUtil.ModifyConfigs(paths)
 		}
 
@@ -164,6 +173,7 @@ var rootCmd = &cobra.Command{
 			fmt.Printf("%s -- %s\n", config.Path, config.Country)
 		}
 		fmt.Printf("Found: %d / Scanned: %d\n", len(succeedConfigs), len(paths))
+		// Fixed: fileUtil -> fileUtil
 		status, err := fileUtil.SaveAsText(succeedConfigs)
 		if err != nil {
 			fmt.Println("Can't create the file")
@@ -199,7 +209,8 @@ func Execute() {
 
 func init() {
 	rootCmd.Version = "beta-0.0.2a"
-	rootCmd.PersistentFlags().StringVarP(&dir, "dir", "d", "~/", "The ovpn files' dir")
+	// Update: Changed default to ~/Downloads
+	rootCmd.PersistentFlags().StringVarP(&dir, "dir", "d", "~/Downloads", "The ovpn files' dir")
 	rootCmd.PersistentFlags().IntVarP(&limit, "limit", "l", 100, "Limit the amount of succeed ovpn to find")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "", false, "To get more output")
 	rootCmd.PersistentFlags().IntVarP(&timeout, "timeout", "t", 15, "The time given to each test process")
@@ -281,7 +292,7 @@ func expandPath(path string) (string, error) {
 
 func checkIncompatibleFlags(current string, verboseAllow bool) bool {
 	conditions := []bool{
-		dir != "~/",
+		dir != "~/Downloads", // Updated check to match new default
 		verbose,
 		maxworkers != 200,
 		limit != 100,
@@ -307,4 +318,3 @@ func checkIncompatibleFlags(current string, verboseAllow bool) bool {
 	}
 	return false
 }
-	
