@@ -1,4 +1,4 @@
-package utilt
+package fileUtil
 
 import (
 	"bufio"
